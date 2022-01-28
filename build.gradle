@@ -1,0 +1,139 @@
+plugins {
+    id 'java'
+    id 'jacoco'
+    id 'checkstyle'
+    id 'maven-publish'
+    id 'org.springframework.boot' version '2.5.6'
+	id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+}
+
+ext {
+    project_group = 'com.company'
+    project_artifact_url = "https://gitlab.com/api/v4/projects/123456/packages/maven"
+    java_version = 14
+    springCloudGcpVersion = '2.0.0'
+    springCloudVersion = '2020.0.2'
+    droolsVersion = '7.58.0.Final'
+}
+if (project.hasProperty("project_version")) {
+    ext.project_version = project.property("project_version")
+}
+else {
+    ext.project_version = 'local'
+}
+if (project.hasProperty("coverage_minimum_rate")) {
+    ext.coverage_minimum_rate_value = (new BigDecimal(project.property("coverage_minimum_rate")))/100
+}
+else{
+    ext.coverage_minimum_rate_value = 0.95
+}
+
+version = project_version
+group =  project_group
+println "Building project ${project.name} in ${projectDir} with version ${version}, coverage ${coverage_minimum_rate_value}"
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(java_version)
+    }
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	implementation 'org.springframework.boot:spring-boot-starter-hateoas'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    
+    testImplementation 'org.mockito:mockito-inline:3.11.0'
+	implementation "org.drools:drools-core:${droolsVersion}"
+	implementation "org.drools:drools-mvel:${droolsVersion}"
+	implementation "org.drools:drools-compiler:${droolsVersion}"
+    implementation "org.drools:drools-decisiontables:${droolsVersion}"
+	compileOnly 'org.projectlombok:lombok:1.18.20'
+	annotationProcessor 'org.projectlombok:lombok:1.18.20'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+}
+
+test {	
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+    jacoco {
+        destinationFile = file("$buildDir/jacoco/jacocoTest.exec")
+        classDumpDir = file("$buildDir/jacoco/classpathdumps")
+    }
+}
+
+check {
+    dependsOn checkstyleMain
+    dependsOn checkstyleTest
+    dependsOn jacocoTestCoverageVerification
+}
+
+tasks.withType(Checkstyle) {
+    reports {
+        xml.enabled false
+        html.enabled true
+    }
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.enabled false
+        csv.enabled true
+        csv.destination file("${buildDir}/jacocoCsv")
+        html.destination file("${buildDir}/jacocoHtml")
+    }
+}
+jacoco {
+    toolVersion = "0.8.6"
+}
+
+jacocoTestCoverageVerification {
+    afterEvaluate {
+        getClassDirectories().setFrom(classDirectories.files.collect {
+            fileTree(dir: it, exclude:  ['**/application/**'])
+        })
+    }
+    
+    violationRules {
+        rule {
+            limit {
+                minimum = coverage_minimum_rate_value
+            }
+        }
+    }
+}
+
+publishing {
+    publications {
+        library(MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url project_artifact_url
+            credentials(HttpHeaderCredentials) {
+                if (System.getenv("CI_JOB_TOKEN") == "") {
+                    name = "Private-Token"
+                    value = gitLabPrivateToken
+                }
+                else{
+                    name = 'Job-Token'
+                    value = System.getenv("CI_JOB_TOKEN")
+                }
+            }
+            authentication {
+                header(HttpHeaderAuthentication)
+            }
+        }
+    }
+}
