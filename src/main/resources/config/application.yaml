@@ -7,6 +7,6 @@ spring:
       port: 8080
    data:
       mongodb:
-         uri: mongodb+srv://admin:admin@cluster0.qfiwo.mongodb.net/db0?retryWrites=true&w=majority
+         uri: mongodb+srv://<user>:<password>@<cluster>/<database>?retryWrites=true&w=majority
 logging.level:
   com.company: DEBUG
